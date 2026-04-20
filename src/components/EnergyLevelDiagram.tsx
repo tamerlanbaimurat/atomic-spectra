@@ -2,7 +2,6 @@ import { useState } from 'react';
 import Plot from 'react-plotly.js';
 import { HYDROGEN_ENERGY_LEVELS, wavelengthToVisibleColor } from '../utils/knownLines';
 import type { DetectedPeak } from '../types';
-import { wavelengthToEnergy } from '../utils/wavelength';
 import type { Data, Layout, Shape, Annotations } from 'plotly.js';
 
 interface EnergyLevelDiagramProps {
@@ -52,47 +51,58 @@ export function EnergyLevelDiagram({ peaks, element }: EnergyLevelDiagramProps) 
   return <HeliumDiagram peaks={peaks} />;
 }
 
+// Hydrogen Balmer series (n → 2). Flag `primary: true` means the line is
+// always drawn boldly (Hα is the main defensible feature in the lab data).
+const BALMER_TRANSITIONS: {
+  from: number;
+  to: number;
+  wavelength: number;
+  label: string;
+  primary?: boolean;
+}[] = [
+  { from: 3, to: 2, wavelength: 656.3, label: 'Hα', primary: true },
+  { from: 4, to: 2, wavelength: 486.1, label: 'Hβ' },
+  { from: 5, to: 2, wavelength: 434.0, label: 'Hγ' },
+  { from: 6, to: 2, wavelength: 410.2, label: 'Hδ' },
+  { from: 7, to: 2, wavelength: 397.0, label: 'Hε' },
+];
+
+// Tight tolerance for calling a theoretical line "observed". A broad tolerance
+// (e.g. 30 nm) produced false matches (random peaks labelled as 4→2, etc.).
+const MATCH_TOL_NM = 4;
+
 function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
   const [height, setHeight] = useState(500);
-  const [compressGround, setCompressGround] = useState(true);
-  const levels = HYDROGEN_ENERGY_LEVELS;
+  const [showTheoretical, setShowTheoretical] = useState(true);
 
-  // Piecewise-linear display mapping: compress energies below the break point
-  // so n=1 at -13.6 eV doesn't push all the excited states into a thin band.
-  // Real energies are preserved in labels and axis tick text.
-  const BREAK = -4;
-  const COMPRESS = 0.2;
-  const toDisplay = (e: number) =>
-    !compressGround || e >= BREAK ? e : BREAK + (e - BREAK) * COMPRESS;
-
-  const yMin = compressGround ? toDisplay(-13.6) - 0.6 : -15;
-  const yMax = 1;
+  // Crop out n=1 entirely: only n = 2..7 are relevant for the Balmer series.
+  const levels = HYDROGEN_ENERGY_LEVELS.filter((l) => l.n >= 2 && l.n <= 7);
 
   const shapes: Partial<Shape>[] = [];
   const annotations: Partial<Annotations>[] = [];
   const traces: Data[] = [];
 
+  // Energy-level lines + labels
   for (const level of levels) {
-    const yd = toDisplay(level.energy);
     shapes.push({
       type: 'line',
-      x0: 0.2,
-      x1: 0.8,
-      y0: yd,
-      y1: yd,
+      x0: 0.18,
+      x1: 0.82,
+      y0: level.energy,
+      y1: level.energy,
       line: { color: '#6366f1', width: 2 },
     });
     annotations.push({
-      x: 0.12,
-      y: yd,
+      x: 0.14,
+      y: level.energy,
       text: `n=${level.n}`,
       showarrow: false,
-      font: { color: '#94a3b8', size: 11 },
+      font: { color: '#cbd5e1', size: 12 },
       xanchor: 'right',
     });
     annotations.push({
-      x: 0.88,
-      y: yd,
+      x: 0.86,
+      y: level.energy,
       text: `${level.energy.toFixed(2)} eV`,
       showarrow: false,
       font: { color: '#64748b', size: 10 },
@@ -100,126 +110,148 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
     });
   }
 
-  const balmerTransitions = [
-    { from: 3, to: 2, wavelength: 656.3 },
-    { from: 4, to: 2, wavelength: 486.1 },
-    { from: 5, to: 2, wavelength: 434.0 },
-    { from: 6, to: 2, wavelength: 410.2 },
-  ];
+  // Ionization limit reference line at E = 0
+  shapes.push({
+    type: 'line',
+    x0: 0.18,
+    x1: 0.82,
+    y0: 0,
+    y1: 0,
+    line: { color: '#475569', width: 1, dash: 'dot' },
+  });
+  annotations.push({
+    x: 0.82,
+    y: 0,
+    text: 'n=∞ (ionization)',
+    showarrow: false,
+    font: { color: '#64748b', size: 9 },
+    xanchor: 'right',
+    yshift: 8,
+  });
 
-  for (const t of balmerTransitions) {
-    const fromLevel = levels.find((l) => l.n === t.from);
-    const toLevel = levels.find((l) => l.n === t.to);
-    if (!fromLevel || !toLevel) continue;
-
-    const x = 0.3 + (t.from - 3) * 0.12;
-    const color = wavelengthToVisibleColor(t.wavelength);
-
-    const matchedPeak = peaks.find(
-      (p) => p.wavelength && Math.abs(p.wavelength - t.wavelength) < 30
-    );
-
-    const yFrom = toDisplay(fromLevel.energy);
-    const yTo = toDisplay(toLevel.energy);
-
-    traces.push({
-      x: [x, x],
-      y: [yFrom, yTo],
-      type: 'scatter',
-      mode: 'lines',
-      line: {
-        color,
-        width: matchedPeak ? 3 : 1.5,
-        dash: matchedPeak ? 'solid' : 'dash',
-      },
-      showlegend: false,
-      hoverinfo: 'text',
-      text: [
-        `${t.from}→${t.to}: ${t.wavelength} nm${matchedPeak ? ` (measured: ${matchedPeak.wavelength?.toFixed(1)} nm)` : ''}`,
-      ],
-    });
-
-    annotations.push({
-      x,
-      y: (yFrom + yTo) / 2,
-      text: `${t.wavelength} nm`,
-      showarrow: false,
-      font: { color, size: 9 },
-      textangle: -90 as unknown as string,
-      xanchor: 'right',
-      xshift: -6,
-    });
-  }
-
-  // Axis break indicator (zigzag) when compression is active
-  if (compressGround) {
-    const breakY = BREAK - 0.25;
-    const zig = 0.015;
-    shapes.push(
-      {
-        type: 'line',
-        xref: 'paper',
-        x0: 0,
-        x1: 1,
-        y0: breakY,
-        y1: breakY,
-        line: { color: '#1a1a2e', width: 8 },
-      },
-      {
-        type: 'line',
-        xref: 'paper',
-        x0: 0,
-        x1: 0.02,
-        y0: breakY - zig,
-        y1: breakY + zig,
-        line: { color: '#94a3b8', width: 1 },
-      },
-      {
-        type: 'line',
-        xref: 'paper',
-        x0: 0.02,
-        x1: 0.04,
-        y0: breakY + zig,
-        y1: breakY - zig,
-        line: { color: '#94a3b8', width: 1 },
+  // Conservative peak-to-transition matching: each peak is assigned at most
+  // once, to its single closest theoretical line within MATCH_TOL_NM. This
+  // prevents loose/incorrect matches from being shown as "observed".
+  const observedIdx = new Set<number>();
+  const matchedWavelength = new Map<number, number>();
+  for (const peak of peaks) {
+    if (!peak.wavelength) continue;
+    let bestIdx = -1;
+    let bestDist = MATCH_TOL_NM;
+    BALMER_TRANSITIONS.forEach((t, idx) => {
+      const d = Math.abs(peak.wavelength! - t.wavelength);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = idx;
       }
-    );
-    annotations.push({
-      xref: 'paper',
-      x: 0.05,
-      y: breakY,
-      text: 'axis break',
-      showarrow: false,
-      font: { color: '#64748b', size: 9 },
-      xanchor: 'left',
     });
-  }
-
-  const measuredWavelengths = peaks
-    .filter((p) => p.wavelength && p.wavelength > 350 && p.wavelength < 800)
-    .map((p) => p.wavelength!);
-
-  if (measuredWavelengths.length > 0) {
-    for (const wl of measuredWavelengths) {
-      const energy = wavelengthToEnergy(wl);
-      const lowerE = -3.4; // n=2
-      const upperE = lowerE + energy;
-
-      const closestLevel = levels.reduce((best, l) =>
-        Math.abs(l.energy - upperE) < Math.abs(best.energy - upperE) ? l : best
-      );
-
-      if (Math.abs(closestLevel.energy - upperE) < 0.5) continue;
+    if (bestIdx >= 0) {
+      const prev = matchedWavelength.get(bestIdx);
+      const prevDist =
+        prev !== undefined
+          ? Math.abs(prev - BALMER_TRANSITIONS[bestIdx].wavelength)
+          : Infinity;
+      if (bestDist < prevDist) {
+        matchedWavelength.set(bestIdx, peak.wavelength);
+        observedIdx.add(bestIdx);
+      }
     }
   }
 
-  // Custom tick values so the y-axis still shows real eV numbers even under
-  // the compressed display mapping.
-  const tickRealValues = compressGround
-    ? [-13.6, -10, -6, -4, -3.4, -1.5, -0.85, 0]
-    : [-15, -12, -9, -6, -3, 0];
-  const tickvals = tickRealValues.map(toDisplay);
-  const ticktext = tickRealValues.map((v) => v.toFixed(v > -1 ? 1 : 1));
+  // Draw transitions. Hα is always shown as the primary observed feature.
+  // Other Balmer lines are drawn as faint dashed references; only upgraded to
+  // "observed" styling if a peak lies within MATCH_TOL_NM.
+  BALMER_TRANSITIONS.forEach((t, idx) => {
+    const fromLevel = levels.find((l) => l.n === t.from);
+    const toLevel = levels.find((l) => l.n === t.to);
+    if (!fromLevel || !toLevel) return;
+
+    const isObserved = !!t.primary || observedIdx.has(idx);
+    if (!isObserved && !showTheoretical) return;
+
+    const x = 0.30 + (t.from - 3) * 0.10;
+    const color = isObserved ? wavelengthToVisibleColor(t.wavelength) : '#64748b';
+
+    if (isObserved) {
+      // Solid colored arrow pointing down to n=2
+      annotations.push({
+        x,
+        y: toLevel.energy,
+        ax: x,
+        ay: fromLevel.energy,
+        xref: 'x',
+        yref: 'y',
+        axref: 'x',
+        ayref: 'y',
+        showarrow: true,
+        arrowhead: 2,
+        arrowsize: 1.3,
+        arrowwidth: t.primary ? 3 : 2.2,
+        arrowcolor: color,
+        text: '',
+        standoff: 0,
+      });
+    } else {
+      // Dashed thin grey line (theoretical, not resolved)
+      shapes.push({
+        type: 'line',
+        xref: 'x',
+        yref: 'y',
+        x0: x,
+        x1: x,
+        y0: fromLevel.energy,
+        y1: toLevel.energy,
+        line: { color: '#475569', width: 1, dash: 'dash' },
+      });
+    }
+
+    const matched = matchedWavelength.get(idx);
+    const labelText = isObserved && matched
+      ? `${t.label}<br>${t.wavelength.toFixed(1)} nm<br><span style="font-size:9px">(obs ${matched.toFixed(1)} nm)</span>`
+      : `${t.label}<br>${t.wavelength.toFixed(1)} nm`;
+
+    annotations.push({
+      x,
+      y: (fromLevel.energy + toLevel.energy) / 2,
+      text: labelText,
+      showarrow: false,
+      font: {
+        color: isObserved ? color : '#64748b',
+        size: isObserved ? 11 : 9,
+      },
+      xanchor: 'left',
+      xshift: 8,
+      align: 'left',
+    });
+  });
+
+  // Mini legend (paper coords)
+  annotations.push(
+    {
+      xref: 'paper',
+      yref: 'paper',
+      x: 0.02,
+      y: 0.98,
+      xanchor: 'left',
+      yanchor: 'top',
+      text: '━━  Observed (Hα, 656.3 nm)',
+      showarrow: false,
+      font: { color: '#ff4444', size: 10 },
+      bgcolor: 'rgba(26,26,46,0.6)',
+      borderpad: 3,
+    },
+    {
+      xref: 'paper',
+      yref: 'paper',
+      x: 0.02,
+      y: 0.92,
+      xanchor: 'left',
+      yanchor: 'top',
+      text: '- - - Theoretical Balmer (not resolved)',
+      showarrow: false,
+      font: { color: '#94a3b8', size: 10 },
+    }
+  );
 
   const layout: Partial<Layout> = {
     paper_bgcolor: 'transparent',
@@ -236,10 +268,10 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
     yaxis: {
       title: { text: 'Energy (eV)' },
       gridcolor: '#2a2a42',
-      range: [yMin, yMax],
+      range: [-3.8, 0.3],
       tickmode: 'array',
-      tickvals,
-      ticktext,
+      tickvals: [-3.4, -1.51, -0.85, -0.54, -0.38, -0.28, 0],
+      ticktext: ['-3.40', '-1.51', '-0.85', '-0.54', '-0.38', '-0.28', '0'],
     },
     shapes,
     annotations,
@@ -252,15 +284,15 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
   return (
     <div>
       <div className="flex items-center gap-4 flex-wrap">
-        <HeightControl height={height} setHeight={setHeight} min={400} max={1600} />
+        <HeightControl height={height} setHeight={setHeight} min={400} max={1400} />
         <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer mb-3">
           <input
             type="checkbox"
-            checked={compressGround}
-            onChange={(e) => setCompressGround(e.target.checked)}
+            checked={showTheoretical}
+            onChange={(e) => setShowTheoretical(e.target.checked)}
             className="accent-indigo-500"
           />
-          Compress n=1 gap
+          Show unresolved Balmer lines
         </label>
       </div>
       <Plot
