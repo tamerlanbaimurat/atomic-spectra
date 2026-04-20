@@ -54,23 +54,37 @@ export function EnergyLevelDiagram({ peaks, element }: EnergyLevelDiagramProps) 
 
 function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
   const [height, setHeight] = useState(500);
+  const [compressGround, setCompressGround] = useState(true);
   const levels = HYDROGEN_ENERGY_LEVELS;
+
+  // Piecewise-linear display mapping: compress energies below the break point
+  // so n=1 at -13.6 eV doesn't push all the excited states into a thin band.
+  // Real energies are preserved in labels and axis tick text.
+  const BREAK = -4;
+  const COMPRESS = 0.2;
+  const toDisplay = (e: number) =>
+    !compressGround || e >= BREAK ? e : BREAK + (e - BREAK) * COMPRESS;
+
+  const yMin = compressGround ? toDisplay(-13.6) - 0.6 : -15;
+  const yMax = 1;
+
   const shapes: Partial<Shape>[] = [];
   const annotations: Partial<Annotations>[] = [];
   const traces: Data[] = [];
 
   for (const level of levels) {
+    const yd = toDisplay(level.energy);
     shapes.push({
       type: 'line',
       x0: 0.2,
       x1: 0.8,
-      y0: level.energy,
-      y1: level.energy,
+      y0: yd,
+      y1: yd,
       line: { color: '#6366f1', width: 2 },
     });
     annotations.push({
       x: 0.12,
-      y: level.energy,
+      y: yd,
       text: `n=${level.n}`,
       showarrow: false,
       font: { color: '#94a3b8', size: 11 },
@@ -78,7 +92,7 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
     });
     annotations.push({
       x: 0.88,
-      y: level.energy,
+      y: yd,
       text: `${level.energy.toFixed(2)} eV`,
       showarrow: false,
       font: { color: '#64748b', size: 10 },
@@ -105,9 +119,12 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
       (p) => p.wavelength && Math.abs(p.wavelength - t.wavelength) < 30
     );
 
+    const yFrom = toDisplay(fromLevel.energy);
+    const yTo = toDisplay(toLevel.energy);
+
     traces.push({
       x: [x, x],
-      y: [fromLevel.energy, toLevel.energy],
+      y: [yFrom, yTo],
       type: 'scatter',
       mode: 'lines',
       line: {
@@ -124,13 +141,57 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
 
     annotations.push({
       x,
-      y: (fromLevel.energy + toLevel.energy) / 2,
+      y: (yFrom + yTo) / 2,
       text: `${t.wavelength} nm`,
       showarrow: false,
       font: { color, size: 9 },
       textangle: -90 as unknown as string,
       xanchor: 'right',
       xshift: -6,
+    });
+  }
+
+  // Axis break indicator (zigzag) when compression is active
+  if (compressGround) {
+    const breakY = BREAK - 0.25;
+    const zig = 0.015;
+    shapes.push(
+      {
+        type: 'line',
+        xref: 'paper',
+        x0: 0,
+        x1: 1,
+        y0: breakY,
+        y1: breakY,
+        line: { color: '#1a1a2e', width: 8 },
+      },
+      {
+        type: 'line',
+        xref: 'paper',
+        x0: 0,
+        x1: 0.02,
+        y0: breakY - zig,
+        y1: breakY + zig,
+        line: { color: '#94a3b8', width: 1 },
+      },
+      {
+        type: 'line',
+        xref: 'paper',
+        x0: 0.02,
+        x1: 0.04,
+        y0: breakY + zig,
+        y1: breakY - zig,
+        line: { color: '#94a3b8', width: 1 },
+      }
+    );
+    annotations.push({
+      xref: 'paper',
+      x: 0.05,
+      y: breakY,
+      text: 'axis break',
+      showarrow: false,
+      font: { color: '#64748b', size: 9 },
+      xanchor: 'left',
     });
   }
 
@@ -152,6 +213,14 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
     }
   }
 
+  // Custom tick values so the y-axis still shows real eV numbers even under
+  // the compressed display mapping.
+  const tickRealValues = compressGround
+    ? [-13.6, -10, -6, -4, -3.4, -1.5, -0.85, 0]
+    : [-15, -12, -9, -6, -3, 0];
+  const tickvals = tickRealValues.map(toDisplay);
+  const ticktext = tickRealValues.map((v) => v.toFixed(v > -1 ? 1 : 1));
+
   const layout: Partial<Layout> = {
     paper_bgcolor: 'transparent',
     plot_bgcolor: '#1a1a2e',
@@ -167,7 +236,10 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
     yaxis: {
       title: { text: 'Energy (eV)' },
       gridcolor: '#2a2a42',
-      range: [-15, 1],
+      range: [yMin, yMax],
+      tickmode: 'array',
+      tickvals,
+      ticktext,
     },
     shapes,
     annotations,
@@ -179,7 +251,18 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
 
   return (
     <div>
-      <HeightControl height={height} setHeight={setHeight} min={400} max={1600} />
+      <div className="flex items-center gap-4 flex-wrap">
+        <HeightControl height={height} setHeight={setHeight} min={400} max={1600} />
+        <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer mb-3">
+          <input
+            type="checkbox"
+            checked={compressGround}
+            onChange={(e) => setCompressGround(e.target.checked)}
+            className="accent-indigo-500"
+          />
+          Compress n=1 gap
+        </label>
+      </div>
       <Plot
         data={traces}
         layout={layout}
