@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Plot from 'react-plotly.js';
 import { HYDROGEN_ENERGY_LEVELS, wavelengthToVisibleColor } from '../utils/knownLines';
 import type { DetectedPeak } from '../types';
@@ -9,6 +10,41 @@ interface EnergyLevelDiagramProps {
   element: string;
 }
 
+function HeightControl({
+  height,
+  setHeight,
+  min,
+  max,
+}: {
+  height: number;
+  setHeight: (h: number) => void;
+  min: number;
+  max: number;
+}) {
+  return (
+    <div className="flex items-center gap-2 mb-3 text-xs text-slate-500">
+      <span>Plot height:</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={25}
+        value={height}
+        onChange={(e) => setHeight(parseInt(e.target.value))}
+        className="flex-1 max-w-xs accent-indigo-500"
+      />
+      <span className="text-slate-400 w-14 text-right">{height}px</span>
+      <button
+        onClick={() => setHeight(min)}
+        className="ml-2 px-2 py-0.5 rounded border border-[#3a3a52] text-slate-500 hover:text-slate-300 hover:border-indigo-500/50 transition-colors"
+        title="Reset height"
+      >
+        Reset
+      </button>
+    </div>
+  );
+}
+
 export function EnergyLevelDiagram({ peaks, element }: EnergyLevelDiagramProps) {
   if (element === 'Hydrogen' || element === 'Deuterium') {
     return <HydrogenDiagram peaks={peaks} />;
@@ -17,6 +53,7 @@ export function EnergyLevelDiagram({ peaks, element }: EnergyLevelDiagramProps) 
 }
 
 function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
+  const [height, setHeight] = useState(500);
   const levels = HYDROGEN_ENERGY_LEVELS;
   const shapes: Partial<Shape>[] = [];
   const annotations: Partial<Annotations>[] = [];
@@ -138,18 +175,22 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
   };
 
   return (
-    <Plot
-      data={traces}
-      layout={layout}
-      config={{ responsive: true, displayModeBar: false }}
-      useResizeHandler
-      className="w-full"
-      style={{ height: '400px' }}
-    />
+    <div>
+      <HeightControl height={height} setHeight={setHeight} min={400} max={1600} />
+      <Plot
+        data={traces}
+        layout={layout}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler
+        className="w-full"
+        style={{ height: `${height}px` }}
+      />
+    </div>
   );
 }
 
 function HeliumDiagram({ peaks }: { peaks: DetectedPeak[] }) {
+  const [height, setHeight] = useState(550);
   const singletLevels = [
     { label: '1S¹', energy: 0, x: 0.15 },
     { label: '2S¹', energy: 20.6, x: 0.15 },
@@ -287,13 +328,16 @@ function HeliumDiagram({ peaks }: { peaks: DetectedPeak[] }) {
   };
 
   return (
-    <Plot
-      data={traces}
-      layout={layout}
-      config={{ responsive: true, displayModeBar: false }}
-      useResizeHandler
-      className="w-full"
-      style={{ height: '450px' }}
-    />
+    <div>
+      <HeightControl height={height} setHeight={setHeight} min={450} max={1600} />
+      <Plot
+        data={traces}
+        layout={layout}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler
+        className="w-full"
+        style={{ height: `${height}px` }}
+      />
+    </div>
   );
 }
