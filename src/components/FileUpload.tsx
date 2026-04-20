@@ -60,7 +60,7 @@ export function FileUpload({ onFilesLoaded }: FileUploadProps) {
               Drop spectrum files here or click to browse
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              Supports tab-separated .txt files (angle vs intensity)
+              Supports tab-separated .txt files (sweep angle vs intensity; angles are halved on import)
             </p>
           </div>
         </div>

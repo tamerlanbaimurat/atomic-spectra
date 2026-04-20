@@ -327,7 +327,8 @@ export default function App() {
             <h3 className="text-lg font-medium text-slate-400 mb-2">No data loaded</h3>
             <p className="text-sm text-slate-600 max-w-md mx-auto">
               Upload your spectral data files to get started. The app accepts tab-separated
-              text files with angle (radians) and light intensity (% max) columns.
+              text files with sweep angle (radians) and light intensity (% max) columns,
+              and converts the imported angles to diffraction angle by dividing by 2.
             </p>
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto text-left">
               {[
@@ -373,7 +374,9 @@ export default function App() {
             </div>
             <p className="text-xs text-slate-600 mt-2">
               The true angle is half the difference between the same line on both sides
-              of the zeroth order, eliminating systematic offset errors.
+              of the zeroth order, eliminating systematic offset errors. Since these scans
+              sweep from the right extreme through the central maximum to the left extreme,
+              uploaded angles are halved before analysis.
             </p>
           </div>
         </div>
