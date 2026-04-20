@@ -155,6 +155,8 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
   const layout: Partial<Layout> = {
     paper_bgcolor: 'transparent',
     plot_bgcolor: '#1a1a2e',
+    autosize: true,
+    height,
     font: { color: '#94a3b8', family: 'Inter, system-ui, sans-serif' },
     xaxis: {
       showticklabels: false,
@@ -172,6 +174,7 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
     margin: { l: 60, r: 80, t: 30, b: 30 },
     showlegend: false,
     hovermode: 'closest',
+    dragmode: 'zoom',
   };
 
   return (
@@ -180,10 +183,15 @@ function HydrogenDiagram({ peaks }: { peaks: DetectedPeak[] }) {
       <Plot
         data={traces}
         layout={layout}
-        config={{ responsive: true, displayModeBar: false }}
+        config={{
+          responsive: true,
+          displayModeBar: true,
+          modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+          displaylogo: false,
+        }}
         useResizeHandler
         className="w-full"
-        style={{ height: `${height}px` }}
+        style={{ width: '100%', height: `${height}px` }}
       />
     </div>
   );
@@ -308,6 +316,8 @@ function HeliumDiagram({ peaks }: { peaks: DetectedPeak[] }) {
   const layout: Partial<Layout> = {
     paper_bgcolor: 'transparent',
     plot_bgcolor: '#1a1a2e',
+    autosize: true,
+    height,
     font: { color: '#94a3b8', family: 'Inter, system-ui, sans-serif' },
     xaxis: {
       showticklabels: false,
@@ -325,6 +335,7 @@ function HeliumDiagram({ peaks }: { peaks: DetectedPeak[] }) {
     margin: { l: 60, r: 20, t: 30, b: 30 },
     showlegend: false,
     hovermode: 'closest',
+    dragmode: 'zoom',
   };
 
   return (
@@ -333,10 +344,15 @@ function HeliumDiagram({ peaks }: { peaks: DetectedPeak[] }) {
       <Plot
         data={traces}
         layout={layout}
-        config={{ responsive: true, displayModeBar: false }}
+        config={{
+          responsive: true,
+          displayModeBar: true,
+          modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+          displaylogo: false,
+        }}
         useResizeHandler
         className="w-full"
-        style={{ height: `${height}px` }}
+        style={{ width: '100%', height: `${height}px` }}
       />
     </div>
   );
